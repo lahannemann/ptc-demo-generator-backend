@@ -13,6 +13,7 @@ from pydantic import json
 
 from apis.cb_client.cb_api_client import CBApiClient
 from services.top_level_item_generator import TopLevelItemGenerator
+from services.traceability_generator import TraceabilityGenerator
 
 app = FastAPI()
 load_dotenv()
@@ -150,6 +151,28 @@ async def get_tracker_names(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/tracker_items")
+async def get_tracker_names(request: Request):
+    data = await request.json()
+    tracker_id = data.get("tracker_id")
+    session_id = request.cookies.get("session_id")
+
+    if not session_id or session_id not in session_store:
+        raise HTTPException(status_code=400, detail="Session not found")
+
+    cb_api_client = session_store[session_id].get("cb_api_client")
+
+    if not cb_api_client:
+        raise HTTPException(status_code=400, detail="Codebeamer client not found")
+
+    try:
+        tracker_items = cb_api_client.get_paginated_tracker_items(int(tracker_id))
+        tracker_item_list = [{"name": tracker.name, "id": tracker.id} for tracker in tracker_items][::-1]
+        return {"tracker_items": tracker_item_list}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/generate_items")
 async def generate_items(request: Request):
     data = await request.json()
@@ -173,6 +196,37 @@ async def generate_items(request: Request):
     try:
         TopLevelItemGenerator(cb_api_client, product, int(tracker_id),
                               item_count, requirement_type, additional_rules).generate()
+        return {"status": "success", "message": "Top level items generated"}
+
+    except Exception as e:
+        print("Exception occurred:", str(e))
+        traceback.print_exc()  # This prints the full traceback to the console
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+@app.post("/api/generate_traceability")
+async def generate_traceability(request: Request):
+    data = await request.json()
+    upstream_tracker_id = data.get("upstream_tracker_id")
+    selected_upstream_items = data.get("selected_tracker_items")
+    downstream_tracker_id = data.get("downstream_tracker_id")
+    downstream_count = data.get("downstream_count")
+    additional_rules = data.get("additional_rules")
+
+    session_id = request.cookies.get("session_id")
+    if not session_id or session_id not in session_store:
+        raise HTTPException(status_code=400, detail="Session not found")
+
+    session_data = session_store[session_id]
+    cb_api_client = session_data.get("cb_api_client")
+    product = session_data.get("product_name")
+
+    if not cb_api_client or not product:
+        raise HTTPException(status_code=400, detail="Missing session data")
+
+    try:
+        TraceabilityGenerator(cb_api_client, product, int(upstream_tracker_id),
+                              selected_upstream_items, int(downstream_tracker_id), downstream_count, additional_rules).generate()
         return {"status": "success", "message": "Top level items generated"}
 
     except Exception as e:

@@ -6,9 +6,8 @@ from apis.gpt_client.gpt_response_data import ItemsParser
 
 class TraceabilityGenerator:
 
-    def __init__(self, cb_client, product, project_id, upstream_tracker_id, upstream_items, downstream_tracker_id, downstream_count, additional_rules):
+    def __init__(self, cb_client, product, upstream_tracker_id, upstream_items, downstream_tracker_id, downstream_count, additional_rules):
         self.product = product
-        self.project_id = project_id
         self.upstream_tracker_id = upstream_tracker_id
         self.upstream_items = upstream_items
         self.downstream_tracker_id = downstream_tracker_id
@@ -25,15 +24,13 @@ class TraceabilityGenerator:
         upstream_tracker_name = upstream_tracker.name
         upstream_tracker_type = upstream_tracker.type.name
 
-        # test_step_updater = TestStepUpdater(self.cb_client, gpt_client)
-
         # Get downstream tracker information from id
         downstream_tracker = self.cb_client.tracker_api_instance.get_tracker(self.downstream_tracker_id)
         downstream_tracker_name = downstream_tracker.name
         downstream_tracker_type = downstream_tracker.type.name
 
         # Create map of upstream items ids and names
-        id_name_map = {value: key for key, value in self.upstream_items.items()}
+        id_name_map = {item['id']: item['name'] for item in self.upstream_items}
 
         # Get new downstream items from GPT
         response = gpt_client.get_downstream_items(id_name_map, self.product, downstream_tracker_name,
@@ -50,7 +47,7 @@ class TraceabilityGenerator:
             upstream_reference = Utils.get_abstract_reference_tracker_item(item.parent_id)
 
             new_added_item = self.cb_client.create_generic_tracker_item(
-                downstream_tracker_name, item.name, item.description, upstream_reference)
+               self.downstream_tracker_id, item.name, item.description, upstream_reference)
             response_items.append(new_added_item)
 
 
