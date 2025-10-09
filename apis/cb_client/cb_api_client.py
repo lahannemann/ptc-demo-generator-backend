@@ -6,7 +6,6 @@ from apis.cb_client.utils import Utils
 
 
 class CBApiClient:
-    _tracker_map = {}
     _member_ids = []
 
     def __init__(self, url, username, password):
@@ -24,7 +23,6 @@ class CBApiClient:
     # Populates project relevant data
     def populate_project_data(self, project_id):
         self._member_ids = []
-        self.populate_tracker_map(project_id)
         self.populate_member_ids(project_id)
 
     # Creates tracker item
@@ -40,12 +38,6 @@ class CBApiClient:
             tracker_id, new_tracker_item)
         return response_object
 
-    # Creates map of tracker names -> id
-    def populate_tracker_map(self, project_id):
-        trackers = self.project_api_instance.get_trackers(project_id)
-        for tracker in trackers:
-            self._tracker_map[tracker.name] = tracker.id
-
     # Creates list of all members on project
     def populate_member_ids(self, project_id):
         members = self.project_api_instance.get_members_of_project(project_id)
@@ -54,12 +46,6 @@ class CBApiClient:
         # Collect member IDs
         for user_ref in user_references:
             self._member_ids.append(user_ref.id)  # Collect the ID
-
-    def get_tracker_id(self, tracker_name):
-        return self._tracker_map[tracker_name]
-
-    def get_tracker_map(self):
-        return self._tracker_map
 
     def get_paginated_tracker_items(self, tracker_id):
         page_size = 100
