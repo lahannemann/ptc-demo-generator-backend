@@ -7,9 +7,10 @@ from itsdangerous import Signer
 from dotenv import load_dotenv
 
 import uuid
+import time
+
 
 from openapi_client.exceptions import ServiceException, UnauthorizedException, NotFoundException
-from pydantic import json
 
 from apis.cb_client.cb_api_client import CBApiClient
 from services.top_level_item_generator import TopLevelItemGenerator
@@ -38,21 +39,38 @@ session_store = {}
 # Signer for secure session IDs
 signer = Signer("your-secret-key")
 
+SESSION_EXPIRATION_SECONDS = 1800  # 30 minutes
+
 
 @app.middleware("http")
 async def add_session_id(request: Request, call_next):
     session_id = request.cookies.get("session_id")
-    if not session_id or signer.unsign(session_id.encode()) is None:
+    expired = False
+
+    if session_id:
+        try:
+            signer.unsign(session_id.encode())
+            session_data = session_store.get(session_id)
+            if session_data:
+                created_at = session_data.get("created_at", 0)
+                if time.time() - created_at > SESSION_EXPIRATION_SECONDS:
+                    expired = True
+        except Exception:
+            expired = True
+
+    if not session_id or expired:
         # Create new session
         raw_id = str(uuid.uuid4())
         signed_id = signer.sign(raw_id).decode()
-        session_store[signed_id] = {}
+        session_store[signed_id] = {"created_at": time.time()}
         response = await call_next(request)
         response.set_cookie(key="session_id", value=signed_id, httponly=True)
         return response
-    else:
-        response = await call_next(request)
-        return response
+
+    response = await call_next(request)
+    return response
+
+
 
 
 @app.get("/api/greet")
@@ -61,6 +79,21 @@ def greet(request: Request):
     session_data = session_store.get(session_id, {})
     cb_url = session_data.get("cb_url", "unknown")
     return {"message": f"Hello {cb_url}!"}
+
+
+@app.get("/api/session_check")
+def session_check(request: Request):
+    session_id = request.cookies.get("session_id")
+
+    if not session_id or session_id not in session_store:
+        raise HTTPException(status_code=400, detail="Session not found")
+
+    cb_api_client = session_store[session_id].get("cb_api_client")
+
+    if not cb_api_client:
+        raise HTTPException(status_code=400, detail="Codebeamer client not found")
+
+    return {"status": "connected"}
 
 
 @app.post("/api/connect")
@@ -74,6 +107,11 @@ async def connect(request: Request):
 
     if session_id not in session_store:
         session_store[session_id] = {}
+
+        # When creating a new session
+        session_store[session_id] = {
+            "created_at": time.time(),
+        }
 
     session_store[session_id]["cb_url"] = url
     session_store[session_id]["cb_api_client"] = cb_api_client
