@@ -13,6 +13,7 @@ import time
 from openapi_client.exceptions import ServiceException, UnauthorizedException, NotFoundException
 
 from apis.cb_client.cb_api_client import CBApiClient
+from services.delete_all_tracker_data import DeleteAllTrackerData
 from services.top_level_item_generator import TopLevelItemGenerator
 from services.traceability_generator import TraceabilityGenerator
 
@@ -273,3 +274,27 @@ async def generate_traceability(request: Request):
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
+@app.post("/api/delete_tracker_data")
+async def delete_tracker_data(request: Request):
+    data = await request.json()
+    tracker_id = data.get("tracker_id")
+
+    session_id = request.cookies.get("session_id")
+
+    if (not session_id or session_id not in session_store):
+        raise HTTPException(status_code=400, detail="Session not found")
+
+    session_data = session_store[session_id]
+    cb_api_client = session_data.get("cb_api_client")
+
+    if not cb_api_client:
+        raise HTTPException(status_code=400, detail="Missing session data")
+
+    try:
+        DeleteAllTrackerData(cb_api_client, int(tracker_id)).generate()
+        return {"status": "success", "message": "All tracker items deleted"}
+
+    except Exception as e:
+        print("Exception occured:", str(e))
+        traceback.print_exc() # prints the full traceback to the console
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
