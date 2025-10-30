@@ -16,6 +16,7 @@ from apis.cb_client.cb_api_client import CBApiClient
 from services.delete_all_tracker_data import DeleteAllTrackerData
 from services.top_level_item_generator import TopLevelItemGenerator
 from services.traceability_generator import TraceabilityGenerator
+from services.delete_all_project_data import DeleteAllProjectData
 
 app = FastAPI()
 load_dotenv()
@@ -150,7 +151,7 @@ async def set_product(request: Request):
     session_store[session_id]["product_name"] = product_name
 
 
-@app.get("/api/projects")
+@app.get("/api/project_names")
 async def get_project_names(request: Request):
     session_id = request.cookies.get("session_id")
     if not session_id or session_id not in session_store:
@@ -161,6 +162,23 @@ async def get_project_names(request: Request):
         raise HTTPException(status_code=404, detail="No project map found")
 
     return {"project_names": list(project_map.keys())}
+
+@app.get("/api/projects")
+async def get_projects(request: Request):
+    session_id = request.cookies.get("session_id")
+    if not session_id or session_id not in session_store:
+        raise HTTPException(status_code=400, detail="Session not found")
+
+    project_map = session_store[session_id].get("project_map")
+    if not project_map:
+        raise HTTPException(status_code=404, detail="No project map found")
+
+    # tracker_list = [{"name": tracker.name, "id": tracker.id} for tracker in trackers]
+    print("This is the project list with keys and values")
+    project_list = [{"name": key, "id": value} for key, value in project_map.items()]
+    print(project_list)
+
+    return {"projects": project_list}
 
 
 @app.post("/api/trackers")
@@ -229,8 +247,11 @@ async def generate_items(request: Request):
     cb_api_client = session_data.get("cb_api_client")
     product = session_data.get("product_name")
 
-    if not cb_api_client or not product:
+    if not cb_api_client:
         raise HTTPException(status_code=400, detail="Missing session data")
+
+    if not product:
+        raise HTTPException(status_code=400, detail="Product not set")
 
     try:
         TopLevelItemGenerator(cb_api_client, product, int(tracker_id),
@@ -296,5 +317,30 @@ async def delete_tracker_data(request: Request):
 
     except Exception as e:
         print("Exception occured:", str(e))
+        traceback.print_exc() # prints the full traceback to the console
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+@app.post("/api/delete_project_data")
+async def delete_project_data(request: Request):
+    data = await request.json()
+    project_id = data.get("project_id")
+
+    session_id = request.cookies.get("session_id")
+
+    if (not session_id or session_id not in session_store):
+        raise HTTPException(status_code=400, detail="Session not found")
+
+    session_data = session_store[session_id]
+    cb_api_client = session_data.get("cb_api_client")
+
+    if not cb_api_client:
+        raise HTTPException(status_code=400, detail="Missing session data")
+
+    try:
+        DeleteAllProjectData(cb_api_client, int(project_id)).generate()
+        return {"status": "success", "message": "All project data deleted"}
+
+    except Exception as e:
+        print("Exception occurred:", str(e))
         traceback.print_exc() # prints the full traceback to the console
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
