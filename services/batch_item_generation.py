@@ -14,7 +14,7 @@ class BatchItemGeneration:
         print("Generating batch items...")
         # Use ThreadPoolExecutor for parallelism
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            executor.map(self.create_tracker_item, range(1, self.count))
+            executor.map(self.create_tracker_item, range(1, self.count+1))
 
     def create_tracker_item(self, i):
         tracker_item = TrackerItem()

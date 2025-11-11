@@ -17,6 +17,7 @@ from services.delete_all_tracker_data import DeleteAllTrackerData
 from services.top_level_item_generator import TopLevelItemGenerator
 from services.traceability_generator import TraceabilityGenerator
 from services.delete_all_project_data import DeleteAllProjectData
+from services.batch_item_generation import BatchItemGeneration
 
 app = FastAPI()
 load_dotenv()
@@ -343,4 +344,30 @@ async def delete_project_data(request: Request):
     except Exception as e:
         print("Exception occurred:", str(e))
         traceback.print_exc() # prints the full traceback to the console
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+@app.post("/api/generate_batch_items")
+async def generate_batch_items(request: Request):
+    data = await request.json()
+    count = data.get("item_count")
+    tracker_id = data.get("tracker_id")
+    tracker_name = data.get("tracker_name")
+
+    session_id = request.cookies.get("session_id")
+
+    if (not session_id or session_id not in session_store):
+        raise HTTPException(status_code=400, detail="Session not found")
+
+    session_data = session_store[session_id]
+    cb_api_clint = session_data.get("cb_api_client")
+
+    if not cb_api_clint:
+        raise HTTPException(status_code=400, detail="Missing session data")
+
+    try:
+        BatchItemGeneration(cb_api_clint, int(tracker_id), tracker_name, int(count)).generate()
+        return {"status": "success", "message": "Batch items generated"}
+    except Exception as e:
+        print("Exception occurred:", str(e))
+        traceback.print_exc() # prints full traceback to console
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
