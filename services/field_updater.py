@@ -11,10 +11,14 @@ class FieldUpdater:
     _fields_to_ignore = {"ID", "Summary", "Tracker", "Submitted at", "Submitted by", "Parent", "Children",
                          "Description", "Description Format", "Attachments", "Status"}
 
-    def __init__(self, cb_client: CBApiClient, tracker_id, item_id_list):
+    def __init__(self, cb_client: CBApiClient, tracker_id, project_id, item_id_list):
         self.cb_client = cb_client
         self.tracker_id = tracker_id
+        self.project_id = project_id
         self.item_id_list = item_id_list
+
+        # MUST INITIALIZE CLIENT BEFORE RUNNING GENERATE
+        self.cb_client.populate_project_data(project_id)
 
     def generate(self):
         print("Updating metadata...")
@@ -35,6 +39,7 @@ class FieldUpdater:
                             setattr(field, "values", [new_choice_id])
                             update_field_item.field_values.append(field)
                     elif isinstance(detailed_field, UserChoiceField):
+                        print("CB Client member IDs:", self.cb_client.member_ids)
                         user = Utils.get_abstract_reference_user(random.choice(self.cb_client.member_ids))
                         setattr(field, "values", user)
                         update_field_item.field_values.append(field)

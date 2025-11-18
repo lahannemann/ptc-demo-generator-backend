@@ -22,6 +22,7 @@ class CBApiClient:
 
     # Populates project relevant data
     def populate_project_data(self, project_id):
+        print("Populating project data in cb client")
         self._member_ids = []
         self.populate_member_ids(project_id)
 
@@ -40,6 +41,7 @@ class CBApiClient:
 
     # Creates list of all members on project
     def populate_member_ids(self, project_id):
+        print("populating member ids now in cb api client")
         members = self.project_api_instance.get_members_of_project(project_id)
         user_references = members.members  # contains the list of UserReference objects
 

@@ -18,6 +18,7 @@ from services.top_level_item_generator import TopLevelItemGenerator
 from services.traceability_generator import TraceabilityGenerator
 from services.delete_all_project_data import DeleteAllProjectData
 from services.batch_item_generation import BatchItemGeneration
+from services.field_updater import FieldUpdater
 
 app = FastAPI()
 load_dotenv()
@@ -174,10 +175,7 @@ async def get_projects(request: Request):
     if not project_map:
         raise HTTPException(status_code=404, detail="No project map found")
 
-    # tracker_list = [{"name": tracker.name, "id": tracker.id} for tracker in trackers]
-    print("This is the project list with keys and values")
     project_list = [{"name": key, "id": value} for key, value in project_map.items()]
-    print(project_list)
 
     return {"projects": project_list}
 
@@ -371,3 +369,35 @@ async def generate_batch_items(request: Request):
         print("Exception occurred:", str(e))
         traceback.print_exc() # prints full traceback to console
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+@app.post("/api/update_item_metadata")
+async def update_item_metadata(request: Request):
+    data = await request.json()
+    tracker_id = data.get("tracker_id")
+    item_id_list = data.get("item_id_list")
+    project_name = data.get("project_name")
+
+    session_id = request.cookies.get("session_id")
+
+    if (not session_id or session_id not in session_store):
+        raise HTTPException(status_code=400, detail="Session not found")
+
+    project_map = session_store[session_id].get("project_map")
+    if not project_map or project_name not in project_map:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project_id = project_map[project_name]
+
+    session_data = session_store[session_id]
+    cb_api_client = session_data.get("cb_api_client")
+
+    if not cb_api_client:
+        raise HTTPException(status_code=500, detail="Missing session data")
+
+    try:
+        FieldUpdater(cb_api_client, int(tracker_id), int(project_id), item_id_list).generate()
+        return {"status": "success", "message":"Item metadata updated successfully"}
+    except Exception as e:
+        print("Exception occurred:", str(e))
+        traceback.print_exc() # prints traceback to console
+        raise HTTPException(status_code=500, detail=f"Internal Error: {str(e)}")
