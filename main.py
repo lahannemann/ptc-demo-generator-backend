@@ -19,6 +19,7 @@ from services.traceability_generator import TraceabilityGenerator
 from services.delete_all_project_data import DeleteAllProjectData
 from services.batch_item_generation import BatchItemGeneration
 from services.field_updater import FieldUpdater
+from services.status_updater import StatusUpdater
 
 app = FastAPI()
 load_dotenv()
@@ -400,4 +401,30 @@ async def update_item_metadata(request: Request):
     except Exception as e:
         print("Exception occurred:", str(e))
         traceback.print_exc() # prints traceback to console
+        raise HTTPException(status_code=500, detail=f"Internal Error: {str(e)}")
+
+
+@app.post("/api/update_item_statuses")
+async def update_item_statuses(request: Request):
+    data = await request.json()
+    tracker_id = data.get("tracker_id")
+    item_id_list = data.get("item_id_list")
+
+    session_id = request.cookies.get("session_id")
+
+    if (not session_id or session_id not in session_store):
+        raise HTTPException(status_code=400, detail="Session not found")
+
+    session_data = session_store[session_id]
+    cb_api_client = session_data.get("cb_api_client")
+
+    if not cb_api_client:
+        raise HTTPException(status_code=500, detail="Missing session data")
+
+    try:
+        StatusUpdater(cb_api_client, int(tracker_id), item_id_list).generate()
+        return {"status": "success", "message": "Item statuses updated successfully"}
+    except Exception as e:
+        print("Exception occurred:", str(e))
+        traceback.print_exc() # prints full traceback to console
         raise HTTPException(status_code=500, detail=f"Internal Error: {str(e)}")
