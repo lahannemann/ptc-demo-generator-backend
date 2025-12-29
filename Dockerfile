@@ -1,24 +1,21 @@
-# Use an official Python runtime as a parent image
-FROM python:3.12-slim
 
-# Set the working directory in the container
+FROM python:3.12-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 
-# Copy the current directory contents into the container at /app
-COPY . /app
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install any needed packages specified in requirements.txt
+# Copy local package and install it in editable mode
+COPY python-client/ ./python-client/
+RUN pip install --no-cache-dir -e ./python-client
+
+# Now install the remaining deps
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install CA certificates tools
-RUN apt-get update && apt-get install -y ca-certificates
+# App code
+COPY . .
 
-# Copy your PEM file
-COPY trusted_certs_12_27.pem /usr/local/share/ca-certificates/trusted_certs_12_27.crt
-
-# Update the system CA store
-RUN update-ca-certificates
-
-# Run your script
-CMD ["python", "-u", "main.py"]
-
+EXPOSE 8000
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
