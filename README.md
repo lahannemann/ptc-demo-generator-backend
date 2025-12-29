@@ -62,10 +62,8 @@
 ### 7. **Run the Backend**
 - From the terminal in the project root:
   ```bash
-  
-docker build -t my-backend .
-docker run -p 8000:8000 my-backend
-
+    docker build -t my-backend .
+    docker run -p 8000:8000 my-backend
   ```
 
 ---
