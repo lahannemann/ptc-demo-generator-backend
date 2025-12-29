@@ -62,7 +62,10 @@
 ### 7. **Run the Backend**
 - From the terminal in the project root:
   ```bash
-  uvicorn main:app --host 0.0.0.0 --port 8000
+  
+docker build -t my-backend .
+docker run -p 8000:8000 my-backend
+
   ```
 
 ---
