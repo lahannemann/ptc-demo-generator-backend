@@ -63,6 +63,7 @@ class CBApiClient:
 
         return all_items
 
+
     @property
     def member_ids(self):
         return self._member_ids

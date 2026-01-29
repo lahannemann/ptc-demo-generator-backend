@@ -14,7 +14,6 @@ class FieldUpdater:
     def __init__(self, cb_client: CBApiClient, tracker_id, project_id, item_id_list):
         self.cb_client = cb_client
         self.tracker_id = tracker_id
-        self.project_id = project_id
         self.item_id_list = item_id_list
 
         # MUST INITIALIZE CLIENT BEFORE RUNNING GENERATE

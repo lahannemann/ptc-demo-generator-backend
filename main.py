@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 import uuid
 import time
 
-
 from openapi_client.exceptions import ServiceException, UnauthorizedException, NotFoundException
 
 from apis.cb_client.cb_api_client import CBApiClient
@@ -26,7 +25,9 @@ load_dotenv()
 
 # Allow requests from your frontend
 origins = [
-    "http://localhost:5173",  # React dev server
+    "http://localhost:5173",
+    "https://gentle-cliff-027fd3d0f.1.azurestaticapps.net",
+    "https://white-been-scanned-retro.trycloudflare.com",
 ]
 
 # Allow frontend access
@@ -76,8 +77,6 @@ async def add_session_id(request: Request, call_next):
     return response
 
 
-
-
 @app.get("/api/greet")
 def greet(request: Request):
     session_id = request.cookies.get("session_id")
@@ -89,6 +88,7 @@ def greet(request: Request):
 @app.get("/api/session_check")
 def session_check(request: Request):
     session_id = request.cookies.get("session_id")
+    print(session_id)
 
     if not session_id or session_id not in session_store:
         raise HTTPException(status_code=400, detail="Session not found")
@@ -98,7 +98,11 @@ def session_check(request: Request):
     if not cb_api_client:
         raise HTTPException(status_code=400, detail="Codebeamer client not found")
 
-    return {"status": "connected"}
+    return {
+        "status": "connected",
+        "url": session_store[session_id]["cb_url"]
+    }
+
 
 
 @app.post("/api/connect")
@@ -109,6 +113,7 @@ async def connect(request: Request):
     password = data.get("password")
     cb_api_client = CBApiClient(url, username, password)
     session_id = request.cookies.get("session_id")
+    print(session_id)
 
     if session_id not in session_store:
         session_store[session_id] = {}
@@ -142,6 +147,20 @@ async def connect(request: Request):
     return {"status": "success"}
 
 
+@app.post("/api/disconnect")
+async def disconnect(request: Request, response: Response):
+    session_id = request.cookies.get("session_id")
+
+    # Delete entire session if it exists
+    if session_id in session_store:
+        session_store.pop(session_id, None)
+
+    # Clear the cookie on client
+    response.delete_cookie("session_id")
+
+    return {"status": "success"}
+
+
 @app.post("/api/set_product")
 async def set_product(request: Request):
     data = await request.json()
@@ -165,20 +184,6 @@ async def get_project_names(request: Request):
         raise HTTPException(status_code=404, detail="No project map found")
 
     return {"project_names": list(project_map.keys())}
-
-@app.get("/api/projects")
-async def get_projects(request: Request):
-    session_id = request.cookies.get("session_id")
-    if not session_id or session_id not in session_store:
-        raise HTTPException(status_code=400, detail="Session not found")
-
-    project_map = session_store[session_id].get("project_map")
-    if not project_map:
-        raise HTTPException(status_code=404, detail="No project map found")
-
-    project_list = [{"name": key, "id": value} for key, value in project_map.items()]
-
-    return {"projects": project_list}
 
 
 @app.post("/api/trackers")
@@ -286,7 +291,8 @@ async def generate_traceability(request: Request):
 
     try:
         TraceabilityGenerator(cb_api_client, product, int(upstream_tracker_id),
-                              selected_upstream_items, int(downstream_tracker_id), downstream_count, additional_rules).generate()
+                              selected_upstream_items, int(downstream_tracker_id), downstream_count,
+                              additional_rules).generate()
         return {"status": "success", "message": "Top level items generated"}
 
     except Exception as e:
@@ -302,7 +308,7 @@ async def delete_tracker_data(request: Request):
 
     session_id = request.cookies.get("session_id")
 
-    if (not session_id or session_id not in session_store):
+    if not session_id or session_id not in session_store:
         raise HTTPException(status_code=400, detail="Session not found")
 
     session_data = session_store[session_id]
@@ -317,18 +323,25 @@ async def delete_tracker_data(request: Request):
 
     except Exception as e:
         print("Exception occured:", str(e))
-        traceback.print_exc() # prints the full traceback to the console
+        traceback.print_exc()  # prints the full traceback to the console
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
 
 @app.post("/api/delete_project_data")
 async def delete_project_data(request: Request):
     data = await request.json()
-    project_id = data.get("project_id")
+    project_name = data.get("project_name")
 
     session_id = request.cookies.get("session_id")
 
-    if (not session_id or session_id not in session_store):
+    if not session_id or session_id not in session_store:
         raise HTTPException(status_code=400, detail="Session not found")
+
+    project_map = session_store[session_id].get("project_map")
+    if not project_map or project_name not in project_map:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project_id = project_map[project_name]
 
     session_data = session_store[session_id]
     cb_api_client = session_data.get("cb_api_client")
@@ -342,8 +355,9 @@ async def delete_project_data(request: Request):
 
     except Exception as e:
         print("Exception occurred:", str(e))
-        traceback.print_exc() # prints the full traceback to the console
+        traceback.print_exc()  # prints the full traceback to the console
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
 
 @app.post("/api/generate_batch_items")
 async def generate_batch_items(request: Request):
@@ -368,8 +382,9 @@ async def generate_batch_items(request: Request):
         return {"status": "success", "message": "Batch items generated"}
     except Exception as e:
         print("Exception occurred:", str(e))
-        traceback.print_exc() # prints full traceback to console
+        traceback.print_exc()  # prints full traceback to console
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
 
 @app.post("/api/update_item_metadata")
 async def update_item_metadata(request: Request):
@@ -397,10 +412,10 @@ async def update_item_metadata(request: Request):
 
     try:
         FieldUpdater(cb_api_client, int(tracker_id), int(project_id), item_id_list).generate()
-        return {"status": "success", "message":"Item metadata updated successfully"}
+        return {"status": "success", "message": "Item metadata updated successfully"}
     except Exception as e:
         print("Exception occurred:", str(e))
-        traceback.print_exc() # prints traceback to console
+        traceback.print_exc()  # prints traceback to console
         raise HTTPException(status_code=500, detail=f"Internal Error: {str(e)}")
 
 
@@ -426,5 +441,5 @@ async def update_item_statuses(request: Request):
         return {"status": "success", "message": "Item statuses updated successfully"}
     except Exception as e:
         print("Exception occurred:", str(e))
-        traceback.print_exc() # prints full traceback to console
+        traceback.print_exc()  # prints full traceback to console
         raise HTTPException(status_code=500, detail=f"Internal Error: {str(e)}")

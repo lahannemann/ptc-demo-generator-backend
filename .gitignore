@@ -169,3 +169,5 @@ config/ai_config.yaml
 trusted_certs_12_27.pem
 /.dockerignore
 cb-demo-generator.tar
+full-stack-cb-demo-generator.tar
+
