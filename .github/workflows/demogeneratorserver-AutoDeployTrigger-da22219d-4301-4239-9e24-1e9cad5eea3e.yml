@@ -40,5 +40,8 @@ jobs:
           containerAppName: demogeneratorserver
           resourceGroup: codebeamer-presales
           imageToBuild: demogeneratoracr.azurecr.io/demogeneratorserver:${{ github.sha }}
+          imageToDeploy: demogeneratoracr.azurecr.io/demogeneratorserver:latest
+          targetLabel: latest
+
 
 
