@@ -71,7 +71,13 @@ async def add_session_id(request: Request, call_next):
         signed_id = signer.sign(raw_id).decode()
         session_store[signed_id] = {"created_at": time.time()}
         response = await call_next(request)
-        response.set_cookie(key="session_id", value=signed_id, httponly=True)
+        response.set_cookie(
+            key="session_id",
+            value=signed_id,
+            httponly=True,
+            secure=True,
+            samesite="none",
+        )
         return response
 
     response = await call_next(request)
