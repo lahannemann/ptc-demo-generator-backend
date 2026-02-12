@@ -51,7 +51,7 @@ SESSION_EXPIRATION_SECONDS = 1800  # 30 minutes
 
 @app.middleware("http")
 async def add_session_id(request: Request, call_next):
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
     expired = False
 
     if session_id:
@@ -66,27 +66,32 @@ async def add_session_id(request: Request, call_next):
             expired = True
 
     if not session_id or expired:
-        # Create new session
         raw_id = str(uuid.uuid4())
-        signed_id = signer.sign(raw_id).decode()
-        session_store[signed_id] = {"created_at": time.time()}
-        response = await call_next(request)
+        session_id = signer.sign(raw_id).decode()   # <-- IMPORTANT: overwrite session_id
+        session_store[session_id] = {"created_at": time.time()}
+
+    # make it available to endpoints on THIS request
+    request.state.session_id = session_id
+
+    response = await call_next(request)
+
+    # if cookie missing/expired, set it on response
+    if not request.cookies.get("session_id") or expired:
         response.set_cookie(
             key="session_id",
-            value=signed_id,
+            value=session_id,
             httponly=True,
             secure=True,
             samesite="none",
+            path="/",
         )
-        return response
 
-    response = await call_next(request)
     return response
 
 
 @app.get("/api/greet")
 def greet(request: Request):
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
     session_data = session_store.get(session_id, {})
     cb_url = session_data.get("cb_url", "unknown")
     return {"message": f"Hello {cb_url}!"}
@@ -94,7 +99,7 @@ def greet(request: Request):
 
 @app.get("/api/session_check")
 def session_check(request: Request):
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
     print(session_id)
 
     if not session_id or session_id not in session_store:
@@ -119,7 +124,7 @@ async def connect(request: Request):
     username = data.get("username")
     password = data.get("password")
     cb_api_client = CBApiClient(url, username, password)
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
     print(session_id)
 
     if session_id not in session_store:
@@ -156,7 +161,7 @@ async def connect(request: Request):
 
 @app.post("/api/disconnect")
 async def disconnect(request: Request, response: Response):
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
 
     # Delete entire session if it exists
     if session_id in session_store:
@@ -172,7 +177,7 @@ async def disconnect(request: Request, response: Response):
 async def set_product(request: Request):
     data = await request.json()
     product_name = data.get("product_name")
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
 
     if not session_id or session_id not in session_store:
         raise HTTPException(status_code=400, detail="Session not found")
@@ -182,7 +187,7 @@ async def set_product(request: Request):
 
 @app.get("/api/project_names")
 async def get_project_names(request: Request):
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
     if not session_id or session_id not in session_store:
         raise HTTPException(status_code=400, detail="Session not found")
 
@@ -197,7 +202,7 @@ async def get_project_names(request: Request):
 async def get_tracker_names(request: Request):
     data = await request.json()
     project_name = data.get("project_name")
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
 
     if not session_id or session_id not in session_store:
         raise HTTPException(status_code=400, detail="Session not found")
@@ -224,7 +229,7 @@ async def get_tracker_names(request: Request):
 async def get_tracker_names(request: Request):
     data = await request.json()
     tracker_id = data.get("tracker_id")
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
 
     if not session_id or session_id not in session_store:
         raise HTTPException(status_code=400, detail="Session not found")
@@ -250,7 +255,7 @@ async def generate_items(request: Request):
     item_count = data.get("item_count")
     additional_rules = data.get("additional_rules")
 
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
     print(session_id)
     if not session_id or session_id not in session_store:
         raise HTTPException(status_code=400, detail="Session not found")
@@ -285,7 +290,7 @@ async def generate_traceability(request: Request):
     downstream_count = data.get("downstream_count")
     additional_rules = data.get("additional_rules")
 
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
     if not session_id or session_id not in session_store:
         raise HTTPException(status_code=400, detail="Session not found")
 
@@ -313,7 +318,7 @@ async def delete_tracker_data(request: Request):
     data = await request.json()
     tracker_id = data.get("tracker_id")
 
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
 
     if not session_id or session_id not in session_store:
         raise HTTPException(status_code=400, detail="Session not found")
@@ -339,7 +344,7 @@ async def delete_project_data(request: Request):
     data = await request.json()
     project_name = data.get("project_name")
 
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
 
     if not session_id or session_id not in session_store:
         raise HTTPException(status_code=400, detail="Session not found")
@@ -373,7 +378,7 @@ async def generate_batch_items(request: Request):
     tracker_id = data.get("tracker_id")
     tracker_name = data.get("tracker_name")
 
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
 
     if (not session_id or session_id not in session_store):
         raise HTTPException(status_code=400, detail="Session not found")
@@ -400,7 +405,7 @@ async def update_item_metadata(request: Request):
     item_id_list = data.get("item_id_list")
     project_name = data.get("project_name")
 
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
 
     if (not session_id or session_id not in session_store):
         raise HTTPException(status_code=400, detail="Session not found")
@@ -432,7 +437,7 @@ async def update_item_statuses(request: Request):
     tracker_id = data.get("tracker_id")
     item_id_list = data.get("item_id_list")
 
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
 
     if (not session_id or session_id not in session_store):
         raise HTTPException(status_code=400, detail="Session not found")
@@ -458,7 +463,7 @@ async def generate_test_steps(request: Request):
     tracker_id = data.get("tracker_id")
     item_id_list = data.get("item_id_list")
 
-    session_id = request.cookies.get("session_id")
+    session_id = request.state.session_id
 
     if not session_id or session_id not in session_store:
         raise HTTPException(status_code=400, detail="Session not found")
