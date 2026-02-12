@@ -28,7 +28,7 @@ load_dotenv()
 origins = [
     "http://localhost:5173",
     "https://gentle-cliff-027fd3d0f.1.azurestaticapps.net",
-    "https://white-been-scanned-retro.trycloudflare.com",
+    "https://demogeneratorserver.proudtree-ef764c79.eastus.azurecontainerapps.io",
 ]
 
 # Allow frontend access
