@@ -13,6 +13,7 @@ from openapi_client.exceptions import ServiceException, UnauthorizedException, N
 
 from apis.cb_client.cb_api_client import CBApiClient
 from services.delete_all_tracker_data import DeleteAllTrackerData
+from services.test_step_generator import TestStepGenerator
 from services.top_level_item_generator import TopLevelItemGenerator
 from services.traceability_generator import TraceabilityGenerator
 from services.delete_all_project_data import DeleteAllProjectData
@@ -439,6 +440,33 @@ async def update_item_statuses(request: Request):
     try:
         StatusUpdater(cb_api_client, int(tracker_id), item_id_list).generate()
         return {"status": "success", "message": "Item statuses updated successfully"}
+    except Exception as e:
+        print("Exception occurred:", str(e))
+        traceback.print_exc()  # prints full traceback to console
+        raise HTTPException(status_code=500, detail=f"Internal Error: {str(e)}")
+
+
+@app.post("/api/generate_test_steps")
+async def generate_test_steps(request: Request):
+    data = await request.json()
+    tracker_id = data.get("tracker_id")
+    item_id_list = data.get("item_id_list")
+
+    session_id = request.cookies.get("session_id")
+
+    if not session_id or session_id not in session_store:
+        raise HTTPException(status_code=400, detail="Session not found")
+
+    session_data = session_store[session_id]
+    cb_api_client = session_data.get("cb_api_client")
+    product = session_data.get("product_name")
+
+    if not cb_api_client:
+        raise HTTPException(status_code=500, detail="Missing session data")
+
+    try:
+        TestStepGenerator(cb_api_client, product, int(tracker_id), item_id_list).generate()
+        return {"status": "success", "message": "Test Steps generated successfully."}
     except Exception as e:
         print("Exception occurred:", str(e))
         traceback.print_exc()  # prints full traceback to console
