@@ -26,12 +26,8 @@ jobs:
           tenant-id: ${{ secrets.DEMOGENERATORSERVER_AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.DEMOGENERATORSERVER_AZURE_SUBSCRIPTION_ID }}
 
-      - name: Log in to ACR
-        uses: docker/login-action@v3
-        with:
-          registry: demogeneratoracr.azurecr.io
-          username: ${{ secrets.DEMOGENERATORSERVER_REGISTRY_USERNAME }}
-          password: ${{ secrets.DEMOGENERATORSERVER_REGISTRY_PASSWORD }}
+      - name: Log in to ACR (using Azure OIDC token)
+        run: az acr login --name demogeneratoracr
 
       - name: Build and push Docker image (sha + latest)
         uses: docker/build-push-action@v6
