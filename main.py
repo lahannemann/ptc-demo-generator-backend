@@ -51,7 +51,11 @@ SESSION_EXPIRATION_SECONDS = 1800  # 30 minutes
 
 @app.middleware("http")
 async def add_session_id(request: Request, call_next):
-    session_id = request.state.session_id
+    # Never create sessions on CORS preflight
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    session_id = request.cookies.get("session_id")
     expired = False
 
     if session_id:
@@ -65,18 +69,19 @@ async def add_session_id(request: Request, call_next):
         except Exception:
             expired = True
 
+    new_session = False
     if not session_id or expired:
         raw_id = str(uuid.uuid4())
-        session_id = signer.sign(raw_id).decode()   # <-- IMPORTANT: overwrite session_id
+        session_id = signer.sign(raw_id).decode()
         session_store[session_id] = {"created_at": time.time()}
+        new_session = True
 
-    # make it available to endpoints on THIS request
+    # Make session id available during this same request
     request.state.session_id = session_id
 
     response = await call_next(request)
 
-    # if cookie missing/expired, set it on response
-    if not request.cookies.get("session_id") or expired:
+    if new_session:
         response.set_cookie(
             key="session_id",
             value=session_id,
@@ -87,6 +92,7 @@ async def add_session_id(request: Request, call_next):
         )
 
     return response
+
 
 
 @app.get("/api/greet")
