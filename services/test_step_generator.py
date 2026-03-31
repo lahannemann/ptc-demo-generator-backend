@@ -1,5 +1,6 @@
-from openapi_client import AbstractFieldValue
+from openapi_client import AbstractFieldValue, TableFieldValue, WikiTextFieldValue
 
+from apis.cb_client.cb_api_client import CBApiClient
 from apis.gpt_client.gpt_api_client import GPTAPIClient
 from apis.gpt_client.gpt_response_data import TestStepParser
 
@@ -30,8 +31,10 @@ class TestStepGenerator:
             for field in tracker_fields:
                 if field.name == "Test Steps":
                     test_step_field_id = field.id
+                    break
 
-            test_step_fields = self.cb_api_client.tracker_api_instance.get_tracker_field(self.test_case_tracker_id, test_step_field_id)
+            test_step_fields = self.cb_api_client.tracker_api_instance.get_tracker_field(self.test_case_tracker_id,
+                                                                                         test_step_field_id)
             for column in getattr(test_step_fields, "columns"):
                 if column.name == "Action":
                     action_field_id = column.id
@@ -42,34 +45,42 @@ class TestStepGenerator:
             for field in tracker_item.custom_fields:
                 if field.field_id == test_step_field_id:
                     existing_test_steps = field
+                    break
 
-            test_steps = None
-            if existing_test_steps is not None:
+            # --- ensure we have a TableFieldValue instance ---
+            if isinstance(existing_test_steps, TableFieldValue):
                 test_steps = existing_test_steps
             else:
-                test_steps = AbstractFieldValue(
-                    field_id=test_step_field_id,
-                    type="TableFieldValue"
-                )
-                tracker_item.custom_fields.append(test_steps)
+                # If it came back as AbstractFieldValue (polymorphism not resolved),
+                # rebuild as TableFieldValue from its dumped dict (keeps any existing values)
+                if existing_test_steps is not None:
+                    test_steps = TableFieldValue.model_validate(existing_test_steps.model_dump(by_alias=True))
+                else:
+                    test_steps = TableFieldValue(field_id=test_step_field_id, type="TableFieldValue", values=[])
+                    tracker_item.custom_fields.append(test_steps)
 
-            setattr(test_steps, "values", [])
+            test_steps.values = []
 
             for step in new_steps:
-                action = AbstractFieldValue(
-                    field_id=action_field_id,
-                    type="WikiTextFieldValue"
-                )
-                setattr(action, "value", step.action)
+                action = WikiTextFieldValue(field_id=action_field_id, type="WikiTextFieldValue", value=step.action)
+                expected = WikiTextFieldValue(field_id=expected_result_id, type="WikiTextFieldValue",
+                                              value=step.expected_result)
 
-                expected_result = AbstractFieldValue(
-                    field_id=expected_result_id,
-                    type="WikiTextFieldValue"
-                )
-                setattr(expected_result, "value", step.expected_result)
-
-                current_values = getattr(test_steps, "values")  # Retrieve the current list
-                current_values.append([action, expected_result])  # Append new pair
-                setattr(test_steps, "values", current_values)
+                test_steps.values.append([action, expected])
 
             self.cb_api_client.tracker_item_api_instance.update_tracker_item(test_case_id, tracker_item)
+
+
+if __name__ == "__main__":
+    # Input data
+    product = "Racecar"
+    project_id = 47
+    tracker_id = 118107
+    test_case_item_ids = [1025787]
+    cb_client = CBApiClient("https://pp-26012119166h.portal.ptc.io:9443/cb", "pat", "ptc")
+
+    # Create an instance of TopLevelItemGenerator
+    generator = TestStepGenerator(cb_client, product, tracker_id, test_case_item_ids)
+
+    # Call the generate method
+    generator.generate()

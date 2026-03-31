@@ -13,6 +13,8 @@ from openapi_client.exceptions import ServiceException, UnauthorizedException, N
 
 from apis.cb_client.cb_api_client import CBApiClient
 from services.delete_all_tracker_data import DeleteAllTrackerData
+from services.downstream_traceability_generator import DownstreamTraceabilityGenerator
+from services.test_run_generator import TestRunGenerator
 from services.test_step_generator import TestStepGenerator
 from services.top_level_item_generator import TopLevelItemGenerator
 from services.traceability_generator import TraceabilityGenerator
@@ -94,7 +96,6 @@ async def add_session_id(request: Request, call_next):
     return response
 
 
-
 @app.get("/api/greet")
 def greet(request: Request):
     session_id = request.state.session_id
@@ -120,7 +121,6 @@ def session_check(request: Request):
         "status": "connected",
         "url": session_store[session_id]["cb_url"]
     }
-
 
 
 @app.post("/api/connect")
@@ -293,6 +293,7 @@ async def generate_traceability(request: Request):
     upstream_tracker_id = data.get("upstream_tracker_id")
     selected_upstream_items = data.get("selected_tracker_items")
     downstream_tracker_id = data.get("downstream_tracker_id")
+    downstream_field_id = data.get("downstream_field_id")
     downstream_count = data.get("downstream_count")
     additional_rules = data.get("additional_rules")
 
@@ -308,9 +309,10 @@ async def generate_traceability(request: Request):
         raise HTTPException(status_code=400, detail="Missing session data")
 
     try:
-        TraceabilityGenerator(cb_api_client, product, int(upstream_tracker_id),
-                              selected_upstream_items, int(downstream_tracker_id), downstream_count,
-                              additional_rules).generate()
+        DownstreamTraceabilityGenerator(cb_api_client, product, int(upstream_tracker_id),
+                                        selected_upstream_items, int(downstream_tracker_id), int(downstream_field_id),
+                                        downstream_count,
+                                        additional_rules).generate()
         return {"status": "success", "message": "Top level items generated"}
 
     except Exception as e:
@@ -488,3 +490,66 @@ async def generate_test_steps(request: Request):
         print("Exception occurred:", str(e))
         traceback.print_exc()  # prints full traceback to console
         raise HTTPException(status_code=500, detail=f"Internal Error: {str(e)}")
+
+@app.post("/api/generate_test_run")
+async def generate_test_run(request: Request):
+    data = await request.json()
+    test_case_tracker_id = data.get("test_case_tracker_id")
+    test_run_tracker_id = data.get("test_run_tracker_id")
+    item_id_list = data.get("item_id_list")
+    passed_count = data.get("passed_count")
+    failed_count = data.get("failed_count")
+    blocked_count = data.get("blocked_count")
+
+    session_id = request.state.session_id
+
+    if not session_id or session_id not in session_store:
+        raise HTTPException(status_code=400, detail="Session not found")
+
+    session_data = session_store[session_id]
+    cb_api_client = session_data.get("cb_api_client")
+
+    if not cb_api_client:
+        raise HTTPException(status_code=500, detail="Missing session data")
+
+    try:
+        TestRunGenerator(cb_api_client, int(test_case_tracker_id), item_id_list, int(test_run_tracker_id), passed_count, failed_count, blocked_count).generate()
+        return {"status": "success", "message": "Test Runs generated successfully."}
+    except Exception as e:
+        print("Exception occurred:", str(e))
+        traceback.print_exc()  # prints full traceback to console
+        raise HTTPException(status_code=500, detail=f"Internal Error: {str(e)}")
+
+
+@app.post("/api/get_reference_fields")
+async def get_reference_fields(request: Request):
+    data = await request.json()
+    tracker_id = data.get("tracker_id")
+
+    session_id = request.state.session_id
+
+    if not session_id or session_id not in session_store:
+        raise HTTPException(status_code=400, detail="Session not found")
+
+    session_data = session_store[session_id]
+    cb_api_client = session_data.get("cb_api_client")
+
+    if not cb_api_client:
+        raise HTTPException(status_code=500, detail="Missing session data")
+
+    try:
+        fields = cb_api_client.tracker_api_instance.get_tracker_fields(int(tracker_id))
+
+        tracker_fields = []
+        for f in fields:
+            full = cb_api_client.tracker_api_instance.get_tracker_field(int(tracker_id), f.id)
+            if full.type == "TrackerItemChoiceField":
+                tracker_fields.append({
+                    "id": str(full.id),
+                    "name": full.name
+                })
+
+        return {"tracker_fields": tracker_fields}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
