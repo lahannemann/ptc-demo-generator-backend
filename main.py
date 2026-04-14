@@ -31,7 +31,7 @@ origins = [
     "http://localhost:5173",
     "https://gentle-cliff-027fd3d0f.1.azurestaticapps.net",
     "https://demogeneratorserver.proudtree-ef764c79.eastus.azurecontainerapps.io",
-    "https://red-river-054c5b710.7.azurestaticapps.net/"
+    "https://red-river-054c5b710.7.azurestaticapps.net"
 ]
 
 # Allow frontend access
